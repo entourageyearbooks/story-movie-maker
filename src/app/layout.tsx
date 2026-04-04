@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import { Fredoka, Caveat, DM_Sans } from "next/font/google";
+import { Comfortaa, Caveat } from "next/font/google";
 import "./globals.css";
 
-const fredoka = Fredoka({
-  variable: "--font-fredoka",
+const comfortaa = Comfortaa({
+  variable: "--font-comfortaa",
   subsets: ["latin"],
 });
 
@@ -12,10 +12,6 @@ const caveat = Caveat({
   subsets: ["latin"],
 });
 
-const dmSans = DM_Sans({
-  variable: "--font-dm-sans",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: "Story Movie Maker",
@@ -30,7 +26,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${fredoka.variable} ${caveat.variable} ${dmSans.variable} h-full antialiased`}
+      className={`${comfortaa.variable} ${caveat.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col font-sans bg-amber-50">
         {children}

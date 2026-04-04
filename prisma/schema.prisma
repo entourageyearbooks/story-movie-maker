@@ -1,0 +1,124 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum StoryType {
+  monster_battle
+  space_adventure
+}
+
+enum StylePreset {
+  storybook_illustration
+  colorful_cartoon
+  comic_book
+}
+
+enum MovieStatus {
+  draft
+  planning
+  filming
+  assembling
+  complete
+  failed
+}
+
+enum ShotStatus {
+  draft
+  preview_generated
+  filming
+  complete
+  failed
+}
+
+model User {
+  id        String   @id @default(cuid())
+  cognitoId String   @unique
+  email     String   @unique
+  name      String?
+  movies    Movie[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Movie {
+  id                  String      @id @default(cuid())
+  userId              String
+  user                User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title               String?
+  storyType           StoryType
+  stylePreset         StylePreset
+  storyAnswers        Json
+  screenplay          Json?
+  narrationEnabled    Boolean     @default(false)
+  narrationScript     String?
+  narrationAudioUrl   String?
+  backgroundMusicUrl  String?
+  creditsSongUrl      String?
+  creditsSongLyrics   String?
+  status              MovieStatus @default(draft)
+  totalDurationSeconds Int?
+  finalVideoUrl       String?
+  generationCostTotal Float       @default(0)
+  characters          Character[]
+  shots               Shot[]
+  titleCards          TitleCard[]
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+}
+
+model Character {
+  id                String  @id @default(cuid())
+  movieId           String
+  movie             Movie   @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  name              String
+  rawImageUrl       String?
+  referenceImageUrl String?
+  styleDescription  String?
+  shots             ShotCharacter[]
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model Shot {
+  id                String     @id @default(cuid())
+  movieId           String
+  movie             Movie      @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  sequenceNumber    Int
+  kidDescription    String
+  technicalPrompt   String?
+  durationSeconds   Float      @default(6)
+  previewImageUrl   String?
+  videoUrl          String?
+  status            ShotStatus @default(draft)
+  reshootsRemaining Int        @default(3)
+  generationCost    Float      @default(0)
+  characters        ShotCharacter[]
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  @@unique([movieId, sequenceNumber])
+}
+
+model ShotCharacter {
+  shotId      String
+  shot        Shot      @relation(fields: [shotId], references: [id], onDelete: Cascade)
+  characterId String
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@id([shotId, characterId])
+}
+
+model TitleCard {
+  id              String @id @default(cuid())
+  movieId         String
+  movie           Movie  @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  position        String
+  text            String
+  durationSeconds Float  @default(3)
+  createdAt       DateTime @default(now())
+}

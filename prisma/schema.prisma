@@ -64,6 +64,7 @@ model Movie {
   totalDurationSeconds Int?
   finalVideoUrl       String?
   generationCostTotal Float       @default(0)
+  progressLog         Json        @default("[]")
   characters          Character[]
   shots               Shot[]
   titleCards          TitleCard[]

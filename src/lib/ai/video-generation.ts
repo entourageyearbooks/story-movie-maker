@@ -1,8 +1,6 @@
 import { fal } from "@fal-ai/client";
 import { prisma } from "@/lib/prisma";
 
-fal.config({ credentials: process.env.FAL_KEY });
-
 const MAX_RETRIES = 2;
 const VIDEO_ENDPOINT = "fal-ai/kling-video/v2/master/image-to-video";
 
@@ -34,6 +32,8 @@ async function generateVideoClip(
 }
 
 export async function generateVideos(movieId: string): Promise<void> {
+  fal.config({ credentials: process.env.FAL_KEY });
+  console.log("[video] FAL_KEY configured:", !!process.env.FAL_KEY);
   const shots = await prisma.shot.findMany({
     where: { movieId, status: { not: "complete" } },
     orderBy: { sequenceNumber: "asc" },

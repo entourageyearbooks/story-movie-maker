@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { storyTemplates, stylePresets } from "@/lib/story-templates";
 import type { StylePreset, TemplateQuestion } from "@/lib/story-templates";
+import { ProcessingModal } from "@/components/processing-modal";
 
 export default function CreateStoryPage() {
   const params = useParams();
@@ -22,6 +23,7 @@ export default function CreateStoryPage() {
   );
   const [narrationEnabled, setNarrationEnabled] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [createdMovieId, setCreatedMovieId] = useState<string | null>(null);
 
   if (!template) {
     return (
@@ -44,25 +46,48 @@ export default function CreateStoryPage() {
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
-      const formData = new FormData();
-      formData.append("storyType", storyType);
-      formData.append("stylePreset", selectedStyle!);
-      formData.append("answers", JSON.stringify(answers));
-      formData.append("narrationEnabled", String(narrationEnabled));
-
-      for (const [key, file] of Object.entries(imageFiles)) {
-        formData.append(key, file);
-      }
-
       const res = await fetch("/api/movies", {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          storyType,
+          stylePreset: selectedStyle,
+          answers,
+          narrationEnabled,
+        }),
       });
 
       if (!res.ok) throw new Error("Failed to create movie");
 
       const { movieId } = await res.json();
-      router.push(`/storyboard/${movieId}`);
+      setCreatedMovieId(movieId);
+
+      // Trigger screenplay generation via the worker server (port 9091)
+      // This runs in a separate process so it doesn't block the main server
+      fetch(`http://localhost:9091/generate/${movieId}`, { method: "POST" })
+        .then((genRes) => {
+          if (genRes.ok) console.log("Screenplay generation started");
+          else console.error("Worker server returned error");
+        })
+        .catch((err) => console.error("Worker server unavailable:", err));
+
+      // Poll for completion, then redirect to storyboard
+      const pollForCompletion = setInterval(async () => {
+        try {
+          const statusRes = await fetch(`/api/movies/${movieId}/progress`);
+          const data = await statusRes.json();
+          if (data.status === "planning" || data.status === "complete") {
+            clearInterval(pollForCompletion);
+            router.push(`/storyboard/${movieId}`);
+          } else if (data.status === "failed") {
+            clearInterval(pollForCompletion);
+            setIsSubmitting(false);
+            setCreatedMovieId(null);
+          }
+        } catch {
+          // ignore polling errors
+        }
+      }, 2000);
     } catch (error) {
       console.error("Failed to create movie:", error);
       setIsSubmitting(false);
@@ -78,6 +103,10 @@ export default function CreateStoryPage() {
     (q) => q.required && q.type !== "image_upload"
   );
   const allRequiredAnswered = requiredQuestions.every((q) => answers[q.id]);
+
+  if (isSubmitting) {
+    return <ProcessingModal movieId={createdMovieId || undefined} />;
+  }
 
   return (
     <main className="flex-1 flex flex-col items-center px-4 py-8">

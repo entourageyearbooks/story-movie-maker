@@ -1,35 +1,19 @@
-import Anthropic from "@anthropic-ai/sdk";
-import { prisma } from "@/lib/prisma";
-import { storyTemplates } from "@/lib/story-templates";
+// This script runs in a separate Node.js process to avoid blocking the main server.
+// Usage: node generate-worker.mjs <movieId>
 
+import Anthropic from "@anthropic-ai/sdk";
+import { PrismaClient } from "@prisma/client";
+
+const prisma = new PrismaClient();
 const anthropic = new Anthropic();
 
-interface ScreenplayScene {
-  sceneNumber: number;
-  title: string;
-  kidDescription: string;
-  technicalPrompt: string;
-  durationSeconds: number;
-  characterNames: string[];
-  cameraDirection: string;
+const movieId = process.argv[2];
+if (!movieId) {
+  console.error("Usage: node generate-worker.mjs <movieId>");
+  process.exit(1);
 }
 
-interface ScreenplayOutput {
-  movieTitle: string;
-  scenes: ScreenplayScene[];
-  narrationScript: string | null;
-  titleCards: { position: string; text: string; durationSeconds: number }[];
-  creditsSongPrompt: string;
-}
-
-interface ProgressEntry {
-  time: string;
-  stage: string;
-  message: string;
-  detail?: string;
-}
-
-const STYLE_PROMPTS: Record<string, string> = {
+const STYLE_PROMPTS = {
   storybook_illustration:
     "warm children's storybook illustration style, soft painterly textures, gentle lighting, watercolor-like backgrounds",
   colorful_cartoon:
@@ -38,26 +22,29 @@ const STYLE_PROMPTS: Record<string, string> = {
     "dynamic comic book style, strong ink outlines, dramatic angles, halftone dot textures, bold action lines",
 };
 
-async function logProgress(
-  movieId: string,
-  stage: string,
-  message: string,
-  detail?: string
-): Promise<void> {
-  const entry: ProgressEntry = {
+const STORY_STRUCTURES = {
+  monster_battle: { title: "Monster Battle", structure: ["Peace", "Threat appears", "Decision to fight", "Battle", "Victory"] },
+  space_adventure: { title: "Space Adventure", structure: ["Launch", "Discovery", "Danger", "Solution", "Return/new frontier"] },
+  fairy_tale_quest: { title: "Fairy Tale Quest", structure: ["Wish", "Twist", "Journey", "Challenge", "Happy ending"] },
+  superhero_origin: { title: "Superhero Origin", structure: ["Normal day", "Transformation", "First mission", "Villain", "Triumph"] },
+  robot_best_friend: { title: "Robot Best Friend", structure: ["Meeting", "Bonding", "Misunderstanding", "Separation", "Reunion"] },
+  haunted_house_mystery: { title: "Haunted House Mystery", structure: ["Dare", "Exploration", "Clues", "Scare", "Truth revealed"] },
+};
+
+async function logProgress(stage, message, detail) {
+  const entry = {
     time: new Date().toLocaleTimeString(),
     stage,
     message,
     ...(detail ? { detail } : {}),
   };
 
-  // Fetch current log, append, save
   const movie = await prisma.movie.findUniqueOrThrow({
     where: { id: movieId },
     select: { progressLog: true },
   });
 
-  const log = (movie.progressLog as unknown as ProgressEntry[]) || [];
+  const log = movie.progressLog || [];
   log.push(entry);
 
   await prisma.movie.update({
@@ -66,48 +53,43 @@ async function logProgress(
   });
 }
 
-export async function generateScreenplay(movieId: string): Promise<void> {
+async function run() {
   try {
-    await logProgress(movieId, "setup", "Loading your story details...");
+    await logProgress("setup", "Loading your story details...");
 
     const movie = await prisma.movie.findUniqueOrThrow({
       where: { id: movieId },
       include: { characters: true },
     });
 
-    const template = storyTemplates.find((t) => t.id === movie.storyType);
+    const template = STORY_STRUCTURES[movie.storyType];
     if (!template) throw new Error(`Unknown story type: ${movie.storyType}`);
 
     const stylePrompt = STYLE_PROMPTS[movie.stylePreset];
-    const answers = movie.storyAnswers as Record<string, string>;
+    const answers = movie.storyAnswers;
 
     const characterDescriptions = movie.characters
       .map((c) => `- ${c.name}${c.referenceImageUrl ? " (has reference image)" : ""}`)
       .join("\n");
 
-    // Log what we're sending to the AI
     const answerSummary = Object.entries(answers)
-      .filter(([, v]) => v && !v.startsWith("http"))
+      .filter(([, v]) => v && !String(v).startsWith("http"))
       .map(([k, v]) => `${k.replace(/_/g, " ")}: ${v}`)
       .join(", ");
 
     await logProgress(
-      movieId,
       "prompt",
       "Building the prompt for our AI director...",
       `Story type: ${template.title} | Style: ${movie.stylePreset.replace(/_/g, " ")} | Characters: ${movie.characters.map((c) => c.name).join(", ") || "none yet"} | Answers: ${answerSummary}`
     );
 
-    // Build the prompt
     const prompt = `You are a children's movie director creating a short animated film. Generate a complete screenplay for a 90-second movie.
 
 STORY TYPE: ${template.title}
 STORY STRUCTURE: ${template.structure.join(" → ")}
 
 KID'S ANSWERS:
-${Object.entries(answers)
-  .map(([key, value]) => `${key}: ${value}`)
-  .join("\n")}
+${Object.entries(answers).map(([key, value]) => `${key}: ${value}`).join("\n")}
 
 CHARACTERS:
 ${characterDescriptions}
@@ -139,7 +121,7 @@ REQUIREMENTS:
   - Opening: "[Movie Title] — A film by [Director]" (we'll fill in the name later)
   - Any needed scene transition cards (e.g., "Meanwhile..." or "The next day...")
   - Ending: "The End"
-- Write a prompt for a custom end-credits song: describe the mood, characters, and theme for a 60-75 second kids' song with singable lyrics
+- Write a prompt for a custom end-credits song
 
 IMPORTANT: Every technical prompt MUST include the art style anchor: "${stylePrompt}"
 
@@ -165,75 +147,62 @@ Respond with ONLY valid JSON matching this exact structure:
 }`;
 
     await logProgress(
-      movieId,
       "calling",
       "Sending to Claude API (model: claude-sonnet-4-6)...",
       "This is the longest step — Claude is writing your entire screenplay with 12 detailed shots."
     );
 
-    const screenplayResponse = await anthropic.messages.create({
+    const response = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 4096,
+      max_tokens: 16384,
       messages: [{ role: "user", content: prompt }],
     });
 
-    await logProgress(
-      movieId,
-      "received",
-      "Screenplay received! Parsing the response..."
-    );
+    await logProgress("received", "Screenplay received! Parsing the response...");
 
-    const responseText =
-      screenplayResponse.content[0].type === "text"
-        ? screenplayResponse.content[0].text
-        : "";
+    const responseText = response.content[0].type === "text" ? response.content[0].text : "";
 
-    // Parse the JSON from the response (handle markdown code blocks)
-    let jsonStr = responseText;
-    const jsonMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (jsonMatch) {
-      jsonStr = jsonMatch[1];
+    // Strip markdown code fences if present
+    let jsonStr = responseText.trim();
+    // Try to extract JSON from code blocks
+    const codeBlockMatch = jsonStr.match(/`{3}(?:json)?\s*([\s\S]*?)`{3}/);
+    if (codeBlockMatch) {
+      jsonStr = codeBlockMatch[1].trim();
+    } else {
+      // Try to find the JSON object directly
+      const jsonStart = jsonStr.indexOf('{');
+      const jsonEnd = jsonStr.lastIndexOf('}');
+      if (jsonStart !== -1 && jsonEnd !== -1) {
+        jsonStr = jsonStr.substring(jsonStart, jsonEnd + 1);
+      }
     }
 
-    let screenplay: ScreenplayOutput;
+    let screenplay;
     try {
       screenplay = JSON.parse(jsonStr.trim());
-    } catch (parseError) {
-      await logProgress(
-        movieId,
-        "error",
-        "Failed to parse Claude's response as JSON",
-        `Response started with: ${responseText.substring(0, 200)}...`
-      );
-      throw parseError;
+    } catch (e) {
+      await logProgress("error", "Failed to parse Claude's response as JSON", responseText.substring(0, 300));
+      throw e;
     }
 
-    await logProgress(
-      movieId,
-      "parsed",
-      `Screenplay parsed! Movie title: "${screenplay.movieTitle}" — ${screenplay.scenes.length} shots found.`
-    );
+    await logProgress("parsed", `Screenplay parsed! Movie title: "${screenplay.movieTitle}" — ${screenplay.scenes.length} shots found.`);
 
-    // Update character style descriptions
+    // Update character styles
     for (const character of movie.characters) {
-      const relevantScenes = screenplay.scenes.filter((s) =>
-        s.characterNames.includes(character.name)
-      );
-      if (relevantScenes.length > 0) {
+      const inScenes = screenplay.scenes.filter((s) => s.characterNames.includes(character.name));
+      if (inScenes.length > 0) {
         await prisma.character.update({
           where: { id: character.id },
-          data: {
-            styleDescription: `${character.name} in ${stylePrompt}`,
-          },
+          data: { styleDescription: `${character.name} in ${stylePrompt}` },
         });
       }
     }
 
-    // Create shots in the database
+    // Create shots
     for (const scene of screenplay.scenes) {
       const shot = await prisma.shot.create({
         data: {
-          movieId: movie.id,
+          movieId,
           sequenceNumber: scene.sceneNumber,
           kidDescription: scene.kidDescription,
           technicalPrompt: scene.technicalPrompt,
@@ -242,43 +211,29 @@ Respond with ONLY valid JSON matching this exact structure:
         },
       });
 
-      // Link characters to shots
       for (const charName of scene.characterNames) {
         const character = movie.characters.find((c) => c.name === charName);
         if (character) {
           await prisma.shotCharacter.create({
-            data: {
-              shotId: shot.id,
-              characterId: character.id,
-            },
+            data: { shotId: shot.id, characterId: character.id },
           });
         }
       }
 
-      await logProgress(
-        movieId,
-        "shot",
-        `Shot ${scene.sceneNumber} of ${screenplay.scenes.length} created: "${scene.title}"`,
-        scene.kidDescription
-      );
+      await logProgress("shot", `Shot ${scene.sceneNumber} of ${screenplay.scenes.length} created: "${scene.title}"`, scene.kidDescription);
     }
 
     // Create title cards
-    await logProgress(movieId, "titles", "Creating title cards...");
+    await logProgress("titles", "Creating title cards...");
     for (const card of screenplay.titleCards) {
       await prisma.titleCard.create({
-        data: {
-          movieId: movie.id,
-          position: card.position,
-          text: card.text,
-          durationSeconds: card.durationSeconds,
-        },
+        data: { movieId, position: card.position, text: card.text, durationSeconds: card.durationSeconds },
       });
     }
 
-    // Update movie with screenplay data
+    // Update movie
     await prisma.movie.update({
-      where: { id: movie.id },
+      where: { id: movieId },
       data: {
         title: screenplay.movieTitle,
         screenplay: JSON.parse(JSON.stringify(screenplay)),
@@ -288,14 +243,15 @@ Respond with ONLY valid JSON matching this exact structure:
       },
     });
 
-    await logProgress(
-      movieId,
-      "complete",
-      "All done! Your storyboard is ready."
-    );
+    await logProgress("complete", "All done! Your storyboard is ready.");
+    console.log(`Screenplay generation complete for ${movieId}`);
   } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    await logProgress(movieId, "error", `Error: ${errorMsg}`).catch(() => {});
-    throw error;
+    console.error(`Screenplay generation failed for ${movieId}:`, error);
+    await logProgress("error", `Error: ${error.message || String(error)}`).catch(() => {});
+    await prisma.movie.update({ where: { id: movieId }, data: { status: "failed" } }).catch(() => {});
+  } finally {
+    await prisma.$disconnect();
   }
 }
+
+run();

@@ -2,8 +2,6 @@ import { fal } from "@fal-ai/client";
 import { prisma } from "@/lib/prisma";
 import type { Shot, ShotCharacter, Character } from "@prisma/client";
 
-fal.config({ credentials: process.env.FAL_KEY });
-
 type ShotWithCharacters = Shot & {
   characters: (ShotCharacter & { character: Character })[];
 };
@@ -14,6 +12,9 @@ export async function generatePreviewImages(
   movieId: string,
   shots: ShotWithCharacters[]
 ): Promise<void> {
+  fal.config({ credentials: process.env.FAL_KEY });
+  console.log("[previews] FAL_KEY configured:", !!process.env.FAL_KEY);
+
   // Generate preview images using Kling Image O3
   // Each preview becomes the first frame of the video (shared MVL framework)
   for (const shot of shots) {

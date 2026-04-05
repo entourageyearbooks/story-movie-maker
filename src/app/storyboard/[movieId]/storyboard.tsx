@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { Movie, Shot, Character, ShotCharacter, TitleCard } from "@prisma/client";
+import { ProcessingModal } from "@/components/processing-modal";
 
 type ShotWithCharacters = Shot & {
   characters: (ShotCharacter & { character: Character })[];
@@ -36,6 +37,28 @@ export function Storyboard({ movie }: { movie: MovieWithRelations }) {
   const [isFilming, setIsFilming] = useState(false);
   const [filmingProgress, setFilmingProgress] = useState(0);
   const [shots, setShots] = useState(movie.shots);
+  const [movieStatus, setMovieStatus] = useState(movie.status);
+  const [movieTitle, setMovieTitle] = useState(movie.title);
+
+  // Poll for screenplay completion if movie is still in draft
+  useEffect(() => {
+    if (movie.status === "draft") {
+      const interval = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/movies/${movie.id}/status`);
+          const data = await res.json();
+          if (data.movie.status !== "draft") {
+            setMovieStatus(data.movie.status);
+            // Reload the page to get the full shot data
+            window.location.reload();
+          }
+        } catch {
+          // ignore polling errors
+        }
+      }, 2000);
+      return () => clearInterval(interval);
+    }
+  }, [movie.status, movie.id]);
 
   const openShotDetail = (shot: ShotWithCharacters) => {
     setSelectedShot(shot);
@@ -89,8 +112,13 @@ export function Storyboard({ movie }: { movie: MovieWithRelations }) {
     setIsFilming(true);
     setFilmingProgress(0);
     try {
+      // Update status via Next.js API
       const res = await fetch(`/api/movies/${movie.id}/film`, { method: "POST" });
       if (!res.ok) throw new Error("Failed to start filming");
+      // Trigger film worker via worker server (port 9091)
+      fetch(`http://localhost:9091/film/${movie.id}`, { method: "POST" })
+        .then(() => console.log("Film worker started"))
+        .catch((err) => console.error("Film worker failed:", err));
       // Poll for progress
       pollFilmingProgress();
     } catch (error) {
@@ -145,6 +173,11 @@ export function Storyboard({ movie }: { movie: MovieWithRelations }) {
     }
   };
 
+  // Show processing modal while screenplay is being generated
+  if (movieStatus === "draft" || shots.length === 0) {
+    return <ProcessingModal movieId={movie.id} />;
+  }
+
   return (
     <main className="flex-1 flex flex-col">
       {/* Header */}
@@ -152,7 +185,7 @@ export function Storyboard({ movie }: { movie: MovieWithRelations }) {
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div>
             <h1 className="font-[family-name:var(--font-heading)] text-2xl md:text-3xl font-bold text-stone-800">
-              {movie.title || "Your Movie"}
+              {movieTitle || movie.title || "Your Movie"}
             </h1>
             <p className="text-stone-500 text-sm">
               {shots.length} shots &middot;{" "}

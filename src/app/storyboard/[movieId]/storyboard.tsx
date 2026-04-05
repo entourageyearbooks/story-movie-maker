@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { Movie, Shot, Character, ShotCharacter, TitleCard } from "@prisma/client";
 import { ProcessingModal } from "@/components/processing-modal";
 
@@ -39,6 +39,14 @@ export function Storyboard({ movie }: { movie: MovieWithRelations }) {
   const [shots, setShots] = useState(movie.shots);
   const [movieStatus, setMovieStatus] = useState(movie.status);
   const [movieTitle, setMovieTitle] = useState(movie.title);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Autoplay video when modal opens with a video
+  useEffect(() => {
+    if (selectedShot?.videoUrl && videoRef.current) {
+      videoRef.current.play().catch(() => {});
+    }
+  }, [selectedShot]);
 
   // Poll for screenplay completion if movie is still in draft
   useEffect(() => {
@@ -217,7 +225,7 @@ export function Storyboard({ movie }: { movie: MovieWithRelations }) {
             <button
               key={shot.id}
               onClick={() => openShotDetail(shot)}
-              className="relative bg-white rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 hover:-translate-y-1 text-left overflow-hidden"
+              className="group relative bg-white rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 hover:-translate-y-1 text-left overflow-hidden"
               style={{ transform: `rotate(${cardRotation(index)})` }}
             >
               {/* Push pin */}
@@ -244,6 +252,22 @@ export function Storyboard({ movie }: { movie: MovieWithRelations }) {
                     <p className="text-xs mt-1">Shot {shot.sequenceNumber}</p>
                   </div>
                 )}
+
+                {/* Play button overlay for shots with video */}
+                {shot.videoUrl && (
+                  <div className="absolute inset-0 flex items-center justify-center z-[5]">
+                    <div className="w-12 h-12 bg-white/80 group-hover:bg-white group-hover:scale-110 rounded-full flex items-center justify-center shadow-lg transition-all duration-200">
+                      <svg
+                        className="w-5 h-5 text-stone-700 ml-0.5"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                      >
+                        <path d="M6.5 3.5v13l10-6.5z" />
+                      </svg>
+                    </div>
+                  </div>
+                )}
+
                 {/* Shot number badge */}
                 <span className="absolute top-2 left-2 bg-stone-800 text-white text-xs font-bold px-2 py-0.5 rounded-full">
                   {shot.sequenceNumber}
@@ -252,6 +276,13 @@ export function Storyboard({ movie }: { movie: MovieWithRelations }) {
                 <span className="absolute top-2 right-2 bg-stone-800/70 text-white text-xs px-2 py-0.5 rounded-full">
                   {shot.durationSeconds}s
                 </span>
+
+                {/* Complete badge */}
+                {shot.status === "complete" && !shot.videoUrl && (
+                  <span className="absolute bottom-2 right-2 bg-green-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                    ✓
+                  </span>
+                )}
               </div>
 
               {/* Card content */}
@@ -272,12 +303,34 @@ export function Storyboard({ movie }: { movie: MovieWithRelations }) {
                 </div>
               </div>
 
-              {/* Status indicator */}
+              {/* Per-card status overlays */}
               {shot.status === "filming" && (
-                <div className="absolute inset-0 bg-amber-400/20 flex items-center justify-center">
+                <div className="absolute inset-0 bg-amber-400/25 flex flex-col items-center justify-center">
                   <span className="text-3xl animate-pulse">🎥</span>
+                  <span className="text-xs font-bold text-amber-800 mt-1 bg-white/80 px-2 py-0.5 rounded-full">
+                    Filming...
+                  </span>
                 </div>
               )}
+              {shot.status === "failed" && (
+                <div className="absolute inset-0 bg-red-500/20 flex flex-col items-center justify-center">
+                  <span className="text-3xl">❌</span>
+                  <span className="text-xs font-bold text-red-700 mt-1 bg-white/80 px-2 py-0.5 rounded-full">
+                    Failed
+                  </span>
+                </div>
+              )}
+              {isFilming &&
+                shot.status !== "filming" &&
+                shot.status !== "complete" &&
+                shot.status !== "failed" && (
+                  <div className="absolute inset-0 bg-stone-800/20 flex flex-col items-center justify-center">
+                    <span className="text-2xl animate-spin">⏳</span>
+                    <span className="text-xs font-bold text-stone-600 mt-1 bg-white/80 px-2 py-0.5 rounded-full">
+                      Queued
+                    </span>
+                  </div>
+                )}
             </button>
           ))}
         </div>
@@ -289,16 +342,21 @@ export function Storyboard({ movie }: { movie: MovieWithRelations }) {
           <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl">
             {/* Preview area */}
             <div className="relative h-64 bg-stone-100 rounded-t-2xl flex items-center justify-center">
-              {selectedShot.previewImageUrl ? (
+              {selectedShot.videoUrl ? (
+                <video
+                  ref={videoRef}
+                  key={selectedShot.id}
+                  src={selectedShot.videoUrl}
+                  controls
+                  autoPlay
+                  muted
+                  playsInline
+                  className="w-full h-full object-cover rounded-t-2xl"
+                />
+              ) : selectedShot.previewImageUrl ? (
                 <img
                   src={selectedShot.previewImageUrl}
                   alt={selectedShot.kidDescription}
-                  className="w-full h-full object-cover rounded-t-2xl"
-                />
-              ) : selectedShot.videoUrl ? (
-                <video
-                  src={selectedShot.videoUrl}
-                  controls
                   className="w-full h-full object-cover rounded-t-2xl"
                 />
               ) : (

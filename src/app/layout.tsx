@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Comfortaa, Caveat } from "next/font/google";
+import { NavHeader } from "@/components/nav-header";
 import "./globals.css";
 
 const comfortaa = Comfortaa({
@@ -29,6 +30,7 @@ export default function RootLayout({
       className={`${comfortaa.variable} ${caveat.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col font-sans bg-amber-50">
+        <NavHeader />
         {children}
       </body>
     </html>

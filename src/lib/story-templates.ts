@@ -55,7 +55,7 @@ export const storyTemplates: StoryTemplate[] = [
     id: "monster_battle",
     title: "Monster Battle",
     hook: "A scary creature shows up. Only you can stop it!",
-    icon: "🐉",
+    icon: "/images/story-types/monster_battle.png",
     structure: [
       "Peace",
       "Threat appears",
@@ -147,7 +147,7 @@ export const storyTemplates: StoryTemplate[] = [
     id: "space_adventure",
     title: "Space Adventure",
     hook: "You're the captain. Where does your crew go?",
-    icon: "🚀",
+    icon: "/images/story-types/space_adventure.png",
     structure: [
       "Launch",
       "Discovery",
@@ -241,7 +241,7 @@ export const storyTemplates: StoryTemplate[] = [
     id: "fairy_tale_quest",
     title: "Fairy Tale Quest",
     hook: "A magical wish goes wrong. Can you set things right?",
-    icon: "🏰",
+    icon: "/images/story-types/fairy_tale_quest.png",
     structure: [
       "Wish",
       "Twist",
@@ -350,7 +350,7 @@ export const storyTemplates: StoryTemplate[] = [
     id: "superhero_origin",
     title: "Superhero Origin",
     hook: "Something amazing just happened to you. Use your new powers!",
-    icon: "🦸",
+    icon: "/images/story-types/superhero_origin.png",
     structure: [
       "Normal day",
       "Transformation",
@@ -470,7 +470,7 @@ export const storyTemplates: StoryTemplate[] = [
     id: "robot_best_friend",
     title: "Robot Best Friend",
     hook: "You just built a robot. But it has a mind of its own!",
-    icon: "🤖",
+    icon: "/images/story-types/robot_best_friend.png",
     structure: [
       "Build",
       "Awakening",
@@ -585,7 +585,7 @@ export const storyTemplates: StoryTemplate[] = [
     id: "haunted_house_mystery",
     title: "Haunted House Mystery",
     hook: "Strange things are happening in the old house. Dare to investigate?",
-    icon: "👻",
+    icon: "/images/story-types/haunted_house_mystery.png",
     structure: [
       "Arrival",
       "Clues",

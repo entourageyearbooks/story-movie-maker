@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import Image from "next/image";
 import { prisma } from "@/lib/prisma";
 import { storyTemplates, stylePresets } from "@/lib/story-templates";
 
@@ -116,9 +117,13 @@ export default async function MyMoviesPage() {
                         className="w-full h-full object-cover"
                       />
                     ) : (
-                      <span className="text-5xl">
-                        {template?.icon ?? "🎬"}
-                      </span>
+                      <Image
+                        src={template?.icon ?? "/images/story-types/monster_battle.png"}
+                        alt={movie.title || "Movie thumbnail"}
+                        width={120}
+                        height={120}
+                        className="rounded-xl"
+                      />
                     )}
                     {/* Status badge */}
                     <span

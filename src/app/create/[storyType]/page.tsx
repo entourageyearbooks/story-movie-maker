@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Image from "next/image";
 import { storyTemplates, stylePresets } from "@/lib/story-templates";
 import type { StylePreset, TemplateQuestion } from "@/lib/story-templates";
 import { ProcessingModal } from "@/components/processing-modal";
@@ -113,7 +114,7 @@ export default function CreateStoryPage() {
       <div className="w-full max-w-2xl">
         {/* Header */}
         <div className="text-center mb-8">
-          <span className="text-5xl block mb-2">{template.icon}</span>
+          <Image src={template.icon} alt={template.title} width={120} height={120} className="mx-auto mb-2 rounded-xl" />
           <h1 className="font-[family-name:var(--font-heading)] text-3xl md:text-4xl font-bold text-stone-800">
             {template.title}
           </h1>
